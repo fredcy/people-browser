@@ -7,7 +7,6 @@ import Html
 
 import Html.Events
 import Http.Extra
-import Http
 import Json.Decode exposing ((:=))
 import Task
 import Effects
@@ -36,7 +35,7 @@ type Action
   = NoOp
   | UpdateQuery String
   | UpdatePeople (List Person)
-  | HttpError String
+  | HttpError (Http.Extra.Error String)
 
 
 update : Action -> Model -> ( Model, Effects.Effects Action )
@@ -73,6 +72,7 @@ view address model =
     ]
 
 
+viewPerson : Person -> Html.Html
 viewPerson person =
   Html.li
     []
@@ -107,15 +107,19 @@ getPeople query =
 
     getTask =
       Http.Extra.get url
-        |> Http.Extra.send decodePeople Json.Decode.string
+        |> Http.Extra.send decodePeople decodeError
   in
-    Task.onError (Task.map (UpdatePeople << .data) getTask) decodeError
+    Task.onError (Task.map (UpdatePeople << .data) getTask) handleError
 
 
-decodeError : Http.Extra.Error String -> Task.Task b Action
-decodeError error =
-  Task.succeed <| HttpError (toString error)
+handleError : Http.Extra.Error String -> Task.Task Effects.Never Action
+handleError error =
+  Task.succeed <| HttpError error
 
+
+decodeError : Json.Decode.Decoder String
+decodeError =
+  Json.Decode.string
 
 decodePeople : Json.Decode.Decoder (List Person)
 decodePeople =
