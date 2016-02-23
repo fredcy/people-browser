@@ -35,7 +35,7 @@ type Action
   = NoOp
   | UpdateQuery String
   | UpdatePeople (List Person)
-  | HttpError (Http.Extra.Error String)
+  | HttpError (Http.Extra.Error Json.Decode.Value)
 
 
 update : Action -> Model -> ( Model, Effects.Effects Action )
@@ -107,19 +107,15 @@ getPeople query =
 
     getTask =
       Http.Extra.get url
-        |> Http.Extra.send decodePeople decodeError
+        |> Http.Extra.send decodePeople Json.Decode.value
   in
     Task.onError (Task.map (UpdatePeople << .data) getTask) handleError
 
 
-handleError : Http.Extra.Error String -> Task.Task Effects.Never Action
+handleError : Http.Extra.Error Json.Decode.Value -> Task.Task Effects.Never Action
 handleError error =
   Task.succeed <| HttpError error
 
-
-decodeError : Json.Decode.Decoder String
-decodeError =
-  Json.Decode.string
 
 decodePeople : Json.Decode.Decoder (List Person)
 decodePeople =
