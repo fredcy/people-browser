@@ -13,12 +13,14 @@ import Task
 import Effects
 import StartApp
 import Time exposing (Time, second)
+import Timer
 
 
 type alias Model =
   { query : String
   , matches : List Person
-  , debounce : Maybe DebounceState
+  , debounce : DebounceState
+  , timer : Timer.Model
   }
 
 
@@ -31,11 +33,12 @@ type alias Person =
 
 init : ( Model, Effects.Effects Action )
 init =
-  ( Model "" [] Nothing, Effects.none )
+  ( Model "" [] Idle Timer.init, Effects.none )
 
 
-type alias DebounceState =
-  { prevClockTime : Time, elapsedTime : Time }
+type DebounceState
+  = Idle
+  | Active { prevClockTime : Time, elapsedTime : Time }
 
 
 type Action
@@ -44,7 +47,16 @@ type Action
   | UpdatePeople (List Person)
   | HttpError (Http.Extra.Error Json.Value)
   | HttpError' Http.Error
-  | Tick String Time
+  | TimerAction Timer.Action
+
+
+timeoutEffect : String -> action -> Effects.Effects action
+timeoutEffect query action =
+  getPeople query |> Task.map (always action) |> Effects.task
+
+
+timeoutEffect' query action =
+  getPeople query |> Task.map (always NoOp) |> Effects.task
 
 
 update : Action -> Model -> ( Model, Effects.Effects Action )
@@ -54,14 +66,9 @@ update action model =
       ( model, Effects.none )
 
     UpdateQuery query ->
-      case model.debounce of
-        Nothing ->
-          ( { model | query = query }, Effects.tick <| Tick query )
-        Just { elapsedTime, prevClockTime } ->
-          let
-            debounce = Just { elapsedTime = 0, prevClockTime = prevClockTime }
-          in
-            ( { model | query = query, debounce = debounce }, Effects.none )
+      ( { model | query = query }
+      , TimerAction (Timer.Start 1000) |> Task.succeed |> Effects.task
+      )
 
     UpdatePeople persons ->
       ( { model | matches = persons }, Effects.none )
@@ -72,24 +79,14 @@ update action model =
     HttpError' error ->
       ( model, Effects.none )
 
-    Tick tag clockTime ->
+    TimerAction taction ->
       let
-        newElapsedTime =
-          case model.debounce of
-            Nothing ->
-              0
-
-            Just { elapsedTime, prevClockTime } ->
-              elapsedTime + (clockTime - prevClockTime)
+        ( newTimer, timerEffect ) =
+          Timer.update (timeoutEffect model.query) taction model.timer
       in
-        if newElapsedTime > 500 then
-          ( { model | debounce = Nothing }
-          , getPeople' model.query |> Effects.task |> Debug.log "get people"
-          )
-        else
-          ( { model | debounce = Just { elapsedTime = newElapsedTime, prevClockTime = clockTime } }
-          , Effects.tick <| Tick tag
-          )
+        ( { model | timer = newTimer }
+        , timerEffect |> Effects.map TimerAction
+        )
 
 
 view : Signal.Address Action -> Model -> Html.Html
@@ -99,6 +96,9 @@ view address model =
     [ Html.input
         [ Html.Events.on "input" Html.Events.targetValue (Signal.message address << UpdateQuery) ]
         []
+    , Html.div
+        []
+        [ Html.text <| toString model.debounce ]
     , Html.ol
         []
         (List.map viewPerson model.matches)
