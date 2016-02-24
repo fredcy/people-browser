@@ -12,11 +12,13 @@ import Json.Decode as Json exposing ((:=))
 import Task
 import Effects
 import StartApp
+import Time exposing (Time, second)
 
 
 type alias Model =
   { query : String
   , matches : List Person
+  , debounce : Maybe DebounceState
   }
 
 
@@ -29,7 +31,11 @@ type alias Person =
 
 init : ( Model, Effects.Effects Action )
 init =
-  ( Model "" [], Effects.none )
+  ( Model "" [] Nothing, Effects.none )
+
+
+type alias DebounceState =
+  { prevClockTime : Time, elapsedTime : Time }
 
 
 type Action
@@ -38,6 +44,7 @@ type Action
   | UpdatePeople (List Person)
   | HttpError (Http.Extra.Error Json.Value)
   | HttpError' Http.Error
+  | Tick String Time
 
 
 update : Action -> Model -> ( Model, Effects.Effects Action )
@@ -47,7 +54,14 @@ update action model =
       ( model, Effects.none )
 
     UpdateQuery query ->
-      ( { model | query = query }, Effects.task <| getPeople' query )
+      case model.debounce of
+        Nothing ->
+          ( { model | query = query }, Effects.tick <| Tick query )
+        Just { elapsedTime, prevClockTime } ->
+          let
+            debounce = Just { elapsedTime = 0, prevClockTime = prevClockTime }
+          in
+            ( { model | query = query, debounce = debounce }, Effects.none )
 
     UpdatePeople persons ->
       ( { model | matches = persons }, Effects.none )
@@ -57,6 +71,25 @@ update action model =
 
     HttpError' error ->
       ( model, Effects.none )
+
+    Tick tag clockTime ->
+      let
+        newElapsedTime =
+          case model.debounce of
+            Nothing ->
+              0
+
+            Just { elapsedTime, prevClockTime } ->
+              elapsedTime + (clockTime - prevClockTime)
+      in
+        if newElapsedTime > 500 then
+          ( { model | debounce = Nothing }
+          , getPeople' model.query |> Effects.task |> Debug.log "get people"
+          )
+        else
+          ( { model | debounce = Just { elapsedTime = newElapsedTime, prevClockTime = clockTime } }
+          , Effects.tick <| Tick tag
+          )
 
 
 view : Signal.Address Action -> Model -> Html.Html
