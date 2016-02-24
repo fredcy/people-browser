@@ -55,10 +55,6 @@ timeoutEffect query action =
   getPeople query |> Task.map (always action) |> Effects.task
 
 
-timeoutEffect' query action =
-  getPeople query |> Task.map (always NoOp) |> Effects.task
-
-
 update : Action -> Model -> ( Model, Effects.Effects Action )
 update action model =
   case action |> Debug.log "action" of
@@ -80,13 +76,16 @@ update action model =
       ( model, Effects.none )
 
     TimerAction taction ->
-      let
-        ( newTimer, timerEffect ) =
-          Timer.update (timeoutEffect model.query) taction model.timer
-      in
-        ( { model | timer = newTimer }
-        , timerEffect |> Effects.map TimerAction
-        )
+      if taction == Timer.Expire then
+        ( { model | timer = Timer.init }, getPeople model.query |> Effects.task )
+      else
+        let
+          ( newTimer, timerEffect ) =
+            Timer.update taction model.timer
+        in
+          ( { model | timer = newTimer }
+          , timerEffect |> Effects.map TimerAction
+          )
 
 
 view : Signal.Address Action -> Model -> Html.Html

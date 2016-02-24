@@ -1,6 +1,7 @@
 module Timer (..) where
 
 import Effects exposing (Effects)
+import Task
 import Time exposing (Time)
 
 
@@ -18,11 +19,11 @@ init =
 type Action
   = Start Time
   | Tick Time
-  | NoOp
+  | Expire
 
 
-update : (Action -> Effects Action) -> Action -> Model -> ( Model, Effects Action )
-update expireEffect action model =
+update : Action -> Model -> ( Model, Effects Action )
+update action model =
   case action of
     Start duration ->
       case model of
@@ -33,7 +34,7 @@ update expireEffect action model =
           ( model, Effects.none ) |> Debug.log "got Start while starting"
 
         Active { previous, elapsed, duration } ->
-          ( Active { previous = previous, elapsed = 0, duration = 0 }, Effects.none )
+          ( Active { previous = previous, elapsed = 0, duration = duration }, Effects.none )
 
     Tick time ->
       case model of
@@ -49,11 +50,11 @@ update expireEffect action model =
               elapsed + (time - previous)
           in
             if newElapsed >= duration then
-              ( Idle, expireEffect NoOp )
+              ( Idle, Effects.task (Task.succeed Expire) ) |> Debug.log "timer expired"
             else
               ( Active { duration = duration, elapsed = newElapsed, previous = time }
               , Effects.tick Tick
               )
 
-    NoOp ->
+    Expire ->
       ( model, Effects.none )
