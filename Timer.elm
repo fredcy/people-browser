@@ -26,7 +26,7 @@ update : Action -> Model -> ( Model, Effects Action )
 update action model =
   case action of
     Start duration ->
-      case model |> Debug.log "starting" of
+      case model of
         Idle ->
           ( Starting duration
           , Effects.tick Tick

@@ -64,7 +64,7 @@ update action model =
 
         effect =
           if taction == Timer.Expire then
-            getPeople' model.query |> Effects.task
+            getPeople model.query |> Effects.task
           else
             timerEffect |> Effects.map TimerAction
       in
@@ -125,7 +125,10 @@ getPeople query =
     handleError error =
       Task.succeed <| HttpError error
   in
-    Task.onError (Task.map (UpdatePeople << .data) getTask) handleError
+    if query == "" then
+      Task.succeed (UpdatePeople [])
+    else
+      Task.onError (Task.map (.data >> UpdatePeople) getTask) handleError
 
 
 getPeople' : String -> Task.Task Effects.Never Action
