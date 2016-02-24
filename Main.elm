@@ -1,10 +1,6 @@
 module Main (..) where
 
 import Html
-
-
--- import Html.Attributes
-
 import Html.Events
 import Http
 import Http.Extra
@@ -12,14 +8,12 @@ import Json.Decode as Json exposing ((:=))
 import Task
 import Effects
 import StartApp
-import Time exposing (Time, second)
 import Timer
 
 
 type alias Model =
   { query : String
   , matches : List Person
-  , debounce : DebounceState
   , timer : Timer.Model
   }
 
@@ -33,37 +27,25 @@ type alias Person =
 
 init : ( Model, Effects.Effects Action )
 init =
-  ( Model "" [] Idle Timer.init, Effects.none )
-
-
-type DebounceState
-  = Idle
-  | Active { prevClockTime : Time, elapsedTime : Time }
+  ( Model "" [] Timer.init
+  , Effects.none
+  )
 
 
 type Action
-  = NoOp
-  | UpdateQuery String
+  = UpdateQuery String
   | UpdatePeople (List Person)
   | HttpError (Http.Extra.Error Json.Value)
   | HttpError' Http.Error
   | TimerAction Timer.Action
 
 
-timeoutEffect : String -> action -> Effects.Effects action
-timeoutEffect query action =
-  getPeople query |> Task.map (always action) |> Effects.task
-
-
 update : Action -> Model -> ( Model, Effects.Effects Action )
 update action model =
-  case action |> Debug.log "action" of
-    NoOp ->
-      ( model, Effects.none )
-
+  case action of
     UpdateQuery query ->
       ( { model | query = query }
-      , TimerAction (Timer.Start 1000) |> Task.succeed |> Effects.task
+      , Timer.start 250 |> Effects.map TimerAction
       )
 
     UpdatePeople persons ->
@@ -76,16 +58,17 @@ update action model =
       ( model, Effects.none )
 
     TimerAction taction ->
-      if taction == Timer.Expire then
-        ( { model | timer = Timer.init }, getPeople model.query |> Effects.task )
-      else
-        let
-          ( newTimer, timerEffect ) =
-            Timer.update taction model.timer
-        in
-          ( { model | timer = newTimer }
-          , timerEffect |> Effects.map TimerAction
-          )
+      let
+        ( newTimer, timerEffect ) =
+          Timer.update taction model.timer
+
+        effect =
+          if taction == Timer.Expire then
+            getPeople' model.query |> Effects.task
+          else
+            timerEffect |> Effects.map TimerAction
+      in
+        ( { model | timer = newTimer }, effect )
 
 
 view : Signal.Address Action -> Model -> Html.Html
@@ -95,9 +78,7 @@ view address model =
     [ Html.input
         [ Html.Events.on "input" Html.Events.targetValue (Signal.message address << UpdateQuery) ]
         []
-    , Html.div
-        []
-        [ Html.text <| toString model.debounce ]
+      --    , Html.text <| toString model.timer
     , Html.ol
         []
         (List.map viewPerson model.matches)
@@ -140,13 +121,11 @@ getPeople query =
     getTask =
       Http.Extra.get url
         |> Http.Extra.send decodePeople Json.value
+
+    handleError error =
+      Task.succeed <| HttpError error
   in
     Task.onError (Task.map (UpdatePeople << .data) getTask) handleError
-
-
-handleError : Http.Extra.Error Json.Value -> Task.Task Effects.Never Action
-handleError error =
-  Task.succeed <| HttpError error
 
 
 getPeople' : String -> Task.Task Effects.Never Action

@@ -1,4 +1,4 @@
-module Timer (..) where
+module Timer (Model, Action(Expire), init, update, start) where
 
 import Effects exposing (Effects)
 import Task
@@ -26,15 +26,19 @@ update : Action -> Model -> ( Model, Effects Action )
 update action model =
   case action of
     Start duration ->
-      case model of
+      case model |> Debug.log "starting" of
         Idle ->
-          ( Starting duration, Effects.tick Tick )
+          ( Starting duration
+          , Effects.tick Tick
+          )
 
         Starting duration ->
           ( model, Effects.none ) |> Debug.log "got Start while starting"
 
         Active { previous, elapsed, duration } ->
-          ( Active { previous = previous, elapsed = 0, duration = duration }, Effects.none )
+          ( Active { previous = previous, elapsed = 0, duration = duration }
+          , Effects.none
+          )
 
     Tick time ->
       case model of
@@ -42,7 +46,9 @@ update action model =
           ( Idle, Effects.none ) |> Debug.log "got tick while idle"
 
         Starting duration ->
-          ( Active { duration = duration, elapsed = 0, previous = time }, Effects.tick Tick )
+          ( Active { duration = duration, elapsed = 0, previous = time }
+          , Effects.tick Tick
+          )
 
         Active { previous, elapsed, duration } ->
           let
@@ -50,11 +56,18 @@ update action model =
               elapsed + (time - previous)
           in
             if newElapsed >= duration then
-              ( Idle, Effects.task (Task.succeed Expire) ) |> Debug.log "timer expired"
+              ( Idle
+              , Effects.task (Task.succeed Expire)
+              )
             else
               ( Active { duration = duration, elapsed = newElapsed, previous = time }
               , Effects.tick Tick
               )
 
     Expire ->
-      ( model, Effects.none )
+      ( Idle, Effects.none )
+
+
+start : Time -> Effects Action
+start duration =
+  Start duration |> Task.succeed |> Effects.task
