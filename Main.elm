@@ -1,6 +1,7 @@
 module Main (..) where
 
 import Html
+import Html.Attributes
 import Html.Events
 import Http
 import Http.Extra
@@ -15,6 +16,7 @@ type alias Model =
   { query : String
   , matches : List Person
   , timer : Timer.Model
+  , httpError : Maybe (Http.Extra.Error Json.Value)
   }
 
 
@@ -27,7 +29,7 @@ type alias Person =
 
 init : ( Model, Effects.Effects Action )
 init =
-  ( Model "" [] Timer.init
+  ( Model "" [] Timer.init Nothing
   , Effects.none
   )
 
@@ -38,6 +40,7 @@ type Action
   | HttpError (Http.Extra.Error Json.Value)
   | HttpError' Http.Error
   | TimerAction Timer.Action
+  | Timeout
 
 
 update : Action -> Model -> ( Model, Effects.Effects Action )
@@ -49,26 +52,28 @@ update action model =
       )
 
     UpdatePeople persons ->
-      ( { model | matches = persons }, Effects.none )
+      ( { model | matches = persons, httpError = Nothing }, Effects.none )
 
     HttpError error ->
-      ( model, Effects.none )
+      ( { model | httpError = Just error }, Effects.none )
 
     HttpError' error ->
       ( model, Effects.none )
 
     TimerAction taction ->
       let
-        ( newTimer, timerEffect ) =
-          Timer.update taction model.timer
+        context =
+          Signal.forwardTo actionMailbox.address (always Timeout)
 
-        effect =
-          if taction == Timer.Expire then
-            getPeople model.query |> Effects.task
-          else
-            timerEffect |> Effects.map TimerAction
+        ( newTimer, timerEffect ) =
+          Timer.update context taction model.timer
       in
-        ( { model | timer = newTimer }, effect )
+        ( { model | timer = newTimer }
+        , Effects.map TimerAction timerEffect
+        )
+
+    Timeout ->
+      ( model, getPeople model.query |> Effects.task )
 
 
 view : Signal.Address Action -> Model -> Html.Html
@@ -79,10 +84,20 @@ view address model =
         [ Html.Events.on "input" Html.Events.targetValue (Signal.message address << UpdateQuery) ]
         []
       --    , Html.text <| toString model.timer
+    , viewError model
     , Html.ol
         []
         (List.map viewPerson model.matches)
     ]
+
+viewError : Model -> Html.Html
+viewError model =
+  case model.httpError of
+    Just error ->
+      Html.div [ Html.Attributes.class "error-message" ] [ Html.text <| toString error ]
+
+    Nothing ->
+      Html.span [] []
 
 
 viewPerson : Person -> Html.Html
@@ -98,7 +113,7 @@ app =
     { init = init
     , update = update
     , view = view
-    , inputs = []
+    , inputs = [ actionMailbox.signal ]
     }
 
 
@@ -110,6 +125,11 @@ port tasks =
 main : Signal Html.Html
 main =
   app.html
+
+
+actionMailbox : Signal.Mailbox Action
+actionMailbox =
+  Signal.mailbox Timeout
 
 
 getPeople : String -> Task.Task Effects.Never Action
