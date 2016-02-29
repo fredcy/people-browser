@@ -3,19 +3,17 @@ module Main (..) where
 import Html
 import Html.Attributes
 import Html.Events
-import Http
 import Http.Extra
 import Json.Decode as Json exposing ((:=))
 import Task
 import Effects
 import StartApp
-import Timer
 
 
 type alias Model =
   { query : String
   , matches : List Person
-  , timer : Timer.Model
+  , sleepCount : Int
   , httpError : Maybe (Http.Extra.Error String)
   }
 
@@ -29,7 +27,7 @@ type alias Person =
 
 init : ( Model, Effects.Effects Action )
 init =
-  ( Model "" [] Timer.init Nothing
+  ( Model "" [] 0 Nothing
   , Effects.none
   )
 
@@ -38,18 +36,20 @@ type Action
   = UpdateQuery String
   | UpdatePeople (List Person)
   | HttpError (Http.Extra.Error String)
-  | HttpError' Http.Error
-  | TimerAction Timer.Action
-  | Timeout
+  | Timeout Int
 
 
 update : Action -> Model -> ( Model, Effects.Effects Action )
 update action model =
   case action of
     UpdateQuery query ->
-      ( { model | query = query }
-      , Timer.start 250 |> Effects.map TimerAction
-      )
+      let
+        newCount =
+          model.sleepCount + 1
+      in
+        ( { model | query = query, sleepCount = newCount }
+        , Task.sleep 250 |> Effects.task |> Effects.map (always (Timeout newCount))
+        )
 
     UpdatePeople persons ->
       ( { model | matches = persons, httpError = Nothing }, Effects.none )
@@ -57,23 +57,13 @@ update action model =
     HttpError error ->
       ( { model | httpError = Just error }, Effects.none )
 
-    HttpError' error ->
-      ( model, Effects.none )
-
-    TimerAction taction ->
-      let
-        context =
-          Signal.forwardTo actionMailbox.address (always Timeout)
-
-        ( newTimer, timerEffect ) =
-          Timer.update context taction model.timer
-      in
-        ( { model | timer = newTimer }
-        , Effects.map TimerAction timerEffect
+    Timeout count ->
+      if count == model.sleepCount then
+        ( { model | sleepCount = 0 }
+        , getPeople model.query |> Effects.task
         )
-
-    Timeout ->
-      ( model, getPeople model.query |> Effects.task )
+      else
+        ( model, Effects.none )
 
 
 view : Signal.Address Action -> Model -> Html.Html
@@ -89,6 +79,7 @@ view address model =
         []
         (List.map viewPerson model.matches)
     ]
+
 
 viewError : Model -> Html.Html
 viewError model =
@@ -129,7 +120,7 @@ main =
 
 actionMailbox : Signal.Mailbox Action
 actionMailbox =
-  Signal.mailbox Timeout
+  Signal.mailbox (Timeout 0)
 
 
 getPeople : String -> Task.Task Effects.Never Action
@@ -149,23 +140,6 @@ getPeople query =
       Task.succeed (UpdatePeople [])
     else
       Task.onError (Task.map (.data >> UpdatePeople) getTask) handleError
-
-
-
-getPeople' : String -> Task.Task a Action
-getPeople' query =
-  let
-    url =
-      "http://app.devnet.imsa.edu:8082/search/" ++ query
-
-    getTask =
-      Http.get decodePeople url
-        |> Task.map UpdatePeople
-
-    errorHandler error =
-      Task.succeed <| HttpError' error
-  in
-    Task.onError getTask errorHandler
 
 
 decodePeople : Json.Decoder (List Person)
