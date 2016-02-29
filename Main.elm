@@ -5,6 +5,7 @@ import Html.Attributes
 import Html.Events
 import Http.Extra
 import Json.Decode as Json exposing ((:=))
+import Json.Decode.Extra exposing ((|:))
 import Task
 import Effects
 import StartApp
@@ -149,8 +150,7 @@ decodePeople =
 
 decodePerson : Json.Decoder Person
 decodePerson =
-  Json.object3
-    (\f l u -> Person f l u)
-    ("FirstName" := Json.string)
-    ("LastName" := Json.string)
-    ("Uid" := (Json.list Json.string))
+  Json.succeed Person
+    |: ("FirstName" := Json.string)
+    |: ("LastName" := Json.string)
+    |: ("Uid" := (Json.list Json.string))
