@@ -16,7 +16,7 @@ type alias Model =
   { query : String
   , matches : List Person
   , timer : Timer.Model
-  , httpError : Maybe (Http.Extra.Error Json.Value)
+  , httpError : Maybe (Http.Extra.Error String)
   }
 
 
@@ -37,7 +37,7 @@ init =
 type Action
   = UpdateQuery String
   | UpdatePeople (List Person)
-  | HttpError (Http.Extra.Error Json.Value)
+  | HttpError (Http.Extra.Error String)
   | HttpError' Http.Error
   | TimerAction Timer.Action
   | Timeout
@@ -140,7 +140,7 @@ getPeople query =
 
     getTask =
       Http.Extra.get url
-        |> Http.Extra.send decodePeople Json.value
+        |> Http.Extra.send (Http.Extra.jsonReader decodePeople) Http.Extra.stringReader
 
     handleError error =
       Task.succeed <| HttpError error
@@ -151,7 +151,8 @@ getPeople query =
       Task.onError (Task.map (.data >> UpdatePeople) getTask) handleError
 
 
-getPeople' : String -> Task.Task Effects.Never Action
+
+getPeople' : String -> Task.Task a Action
 getPeople' query =
   let
     url =
