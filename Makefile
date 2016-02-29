@@ -13,3 +13,5 @@ watch:
 browse:
 	browser-sync start --server --startPath people.html --files elm.js
 
+clean:
+	-rm -r elm-stuff/build-artifacts
