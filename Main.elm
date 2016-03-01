@@ -98,6 +98,7 @@ viewError model =
       Html.span [] []
 
 
+viewPeople : List Person -> Html.Html
 viewPeople persons =
   Html.table
     [ class "persons" ]
@@ -106,6 +107,7 @@ viewPeople persons =
     )
 
 
+personHeaderRow : Html.Html
 personHeaderRow =
   let
     th s =
@@ -121,6 +123,7 @@ personHeaderRow =
       ]
 
 
+viewPersonRow : Person -> Html.Html
 viewPersonRow person =
   Html.tr
     []
@@ -132,6 +135,7 @@ viewPersonRow person =
     ]
 
 
+viewUids : List String -> List Html.Html
 viewUids uidList =
   let
     separator =
@@ -154,6 +158,7 @@ viewUids uidList =
 
 {-| Compare such that the alumni Uid values sort after other Uid values.
 -}
+compareUid : String -> String -> Order
 compareUid a b =
   case ( isAlumUid a, isAlumUid b ) of
     ( False, False ) ->
@@ -169,6 +174,7 @@ compareUid a b =
       GT
 
 
+isAlumUid : String -> Bool
 isAlumUid string =
   Regex.contains (Regex.regex "[A-Z]") string
 
