@@ -1,7 +1,6 @@
 (function () {
 
     var div = document.getElementById("elm");
-    var app = Elm.embed(Elm.Main, div);
-
+    var app = Elm.embed(Elm.Main, div, { initQuery: "foo" } );
 })();
 

@@ -1,14 +1,17 @@
 module Main (..) where
 
 import Html
-import Html.Attributes
+import Html.Attributes exposing (class)
 import Html.Events
 import Http.Extra
 import Json.Decode as Json exposing ((:=))
 import Json.Decode.Extra exposing ((|:))
+import Json.Encode
 import Task
 import Effects
+import Regex
 import StartApp
+import String
 
 
 type alias Model =
@@ -23,13 +26,16 @@ type alias Person =
   { firstName : String
   , lastName : String
   , uid : List String
+  , orgStatus : String
+  , dn : String
+  , ous : List String
   }
 
 
 init : ( Model, Effects.Effects Action )
 init =
   ( Model "" [] 0 Nothing
-  , Effects.none
+  , Effects.task (Task.succeed (UpdateQuery initQuery))
   )
 
 
@@ -72,13 +78,13 @@ view address model =
   Html.div
     []
     [ Html.input
-        [ Html.Events.on "input" Html.Events.targetValue (Signal.message address << UpdateQuery) ]
+        [ Html.Events.on "input" Html.Events.targetValue (Signal.message address << UpdateQuery)
+        , Html.Attributes.value model.query
+        ]
         []
       --    , Html.text <| toString model.timer
     , viewError model
-    , Html.ol
-        []
-        (List.map viewPerson model.matches)
+    , viewPeople model.matches
     ]
 
 
@@ -90,6 +96,81 @@ viewError model =
 
     Nothing ->
       Html.span [] []
+
+
+viewPeople persons =
+  Html.table
+    [ class "persons" ]
+    (personHeaderRow
+      :: (List.map viewPersonRow (List.sortBy .lastName persons))
+    )
+
+
+personHeaderRow =
+  let
+    th s =
+      Html.th [] [ Html.text s ]
+  in
+    Html.tr
+      []
+      [ th "first"
+      , th "last"
+      , th "uids"
+      , th "orgStatus"
+      , th "ou"
+      ]
+
+
+viewPersonRow person =
+  Html.tr
+    []
+    [ Html.td [ class "firstname" ] [ Html.text person.firstName ]
+    , Html.td [ class "lastname" ] [ Html.text person.lastName ]
+    , Html.td [] (viewUids person.uid)
+    , Html.td [] [ Html.text person.orgStatus ]
+    , Html.td [] [ Html.text <| String.join ", " (List.sort person.ous) ]
+    ]
+
+
+viewUids uidList =
+  let
+    separator =
+      Html.span [ Html.Attributes.property "innerHTML" (Json.Encode.string "&nbsp;&nbsp;") ] []
+
+    uidSpan uid =
+      Html.span
+        [ Html.Attributes.classList
+            [ ( "uid", True )
+            , ( "alum", isAlumUid uid )
+            ]
+        ]
+        [ Html.text uid ]
+
+    uidSpans =
+      List.map uidSpan (List.sortWith compareUid uidList)
+  in
+    List.intersperse separator uidSpans
+
+
+{-| Compare such that the alumni Uid values sort after other Uid values.
+-}
+compareUid a b =
+  case ( isAlumUid a, isAlumUid b ) of
+    ( False, False ) ->
+      compare a b
+
+    ( True, True ) ->
+      compare a b
+
+    ( False, True ) ->
+      LT
+
+    ( True, False ) ->
+      GT
+
+
+isAlumUid string =
+  Regex.contains (Regex.regex "[A-Z]") string
 
 
 viewPerson : Person -> Html.Html
@@ -114,6 +195,7 @@ port tasks =
   app.tasks
 
 
+port initQuery : String
 main : Signal Html.Html
 main =
   app.html
@@ -154,3 +236,6 @@ decodePerson =
     |: ("FirstName" := Json.string)
     |: ("LastName" := Json.string)
     |: ("Uid" := (Json.list Json.string))
+    |: ("OrgStatus" := Json.string)
+    |: ("Dn" := Json.string)
+    |: ("Ous" := (Json.list Json.string))

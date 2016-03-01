@@ -1,0 +1,12 @@
+table.persons { margin: 2em }
+
+td { padding: .3em }
+
+th { padding: .3em; padding-bottom: .5em }
+
+td.firstname { text-align: right }
+
+td.lastname { font-weight: bold }
+
+span.alum { color: lightgrey; font-size: 85% }
+
